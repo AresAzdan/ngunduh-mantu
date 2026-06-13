@@ -229,7 +229,6 @@ const GuestNameDisplay = ({ guestName }: { guestName: string }) => (
       {guestName}
     </h2>
     <p className="mx-auto mt-4 max-w-md font-sans text-xs leading-relaxed opacity-75 md:text-sm">
-      Mohon maaf apabila ada kesalahan penulisan nama atau gelar.
     </p>
   </motion.div>
 );
