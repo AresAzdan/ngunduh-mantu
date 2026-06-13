@@ -1,11 +1,40 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Calendar, Clock, Heart, ArrowDown, Send, CheckCircle2 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useMusic } from './MusicContext';
 
 // === COMPONENTS ===
+
+const FALLBACK_GUEST_NAME = "Tamu Undangan";
+
+const decodeGuestName = (value: string) => {
+  const plusAsSpaces = value.replace(/\+/g, " ");
+
+  try {
+    return decodeURIComponent(plusAsSpaces);
+  } catch {
+    return plusAsSpaces;
+  }
+};
+
+const sanitizeGuestName = (value?: string | null, fallback = FALLBACK_GUEST_NAME) => {
+  if (!value) {
+    return fallback;
+  }
+
+  const sanitized = decodeGuestName(value)
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+
+  return sanitized || fallback;
+};
 
 // 1. Google Fonts Injection & Base Styles
 const FontStyles = () => (
@@ -185,6 +214,43 @@ const FadeIn = ({ children, delay = 0, className = "" }: { children: React.React
   </motion.div>
 );
 
+const GuestNameDisplay = ({ guestName }: { guestName: string }) => (
+  <motion.div
+    key={guestName}
+    initial={{ opacity: 0, y: 14 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.8, delay: 1.35, ease: "easeOut" }}
+    className="mb-10 w-full max-w-xl text-center text-[#A6842E] md:mb-12"
+  >
+    <p className="font-sans text-xs uppercase tracking-[0.35em] opacity-80 md:text-sm">
+      Kepada Yth.
+    </p>
+    <h2 className="mt-3 font-serif text-3xl font-semibold leading-tight tracking-wide md:text-5xl">
+      {guestName}
+    </h2>
+    <p className="mx-auto mt-4 max-w-md font-sans text-xs leading-relaxed opacity-75 md:text-sm">
+      Mohon maaf apabila ada kesalahan penulisan nama atau gelar.
+    </p>
+  </motion.div>
+);
+
+const GuestNameFromSearchParams = ({ initialGuestName }: { initialGuestName: string }) => {
+  const searchParams = useSearchParams();
+  const queryGuestName = searchParams.get("to");
+  const guestName = useMemo(
+    () => sanitizeGuestName(queryGuestName ?? initialGuestName),
+    [initialGuestName, queryGuestName],
+  );
+
+  return <GuestNameDisplay guestName={guestName} />;
+};
+
+const GuestNameSection = ({ initialGuestName }: { initialGuestName: string }) => (
+  <Suspense fallback={<GuestNameDisplay guestName={sanitizeGuestName(initialGuestName)} />}>
+    <GuestNameFromSearchParams initialGuestName={initialGuestName} />
+  </Suspense>
+);
+
 
 // === MAIN APPLICATION PAGE ===
 
@@ -198,7 +264,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
 
   // --- RSVP & GUESTBOOK STATE ---
   const [rsvpData, setRsvpData] = useState({
-    name: initialGuestName,
+    name: sanitizeGuestName(initialGuestName, ""),
     attendance: 'hadir',
     guests: '1',
     message: ''
@@ -297,16 +363,18 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                   initial={{ opacity: 0 }} 
                   animate={{ opacity: 1 }} 
                   transition={{ duration: 1, delay: 1.2 }}
-                  className="text-[#A6842E] font-serif text-xl md:text-2xl mb-12 tracking-wide"
+                  className="mb-8 font-serif text-xl tracking-wide text-[#A6842E] md:text-2xl"
                 >
                   24 Juni 2026
                 </motion.p>
+
+                <GuestNameSection initialGuestName={initialGuestName} />
 
                 <motion.button
                   onClick={handleOpenInvitation}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 1, delay: 1.5 }}
+                  transition={{ duration: 1, delay: 1.7 }}
                   whileHover={{ scale: 1.05, backgroundColor: "#C2A34F" }}
                   whileTap={{ scale: 0.95 }}
                   className="group relative px-8 py-4 bg-[#A6842E] text-[#10260D] rounded-full font-medium tracking-wider shadow-[0_0_20px_rgba(166,132,46,0.3)] transition-all flex items-center gap-3 overflow-hidden"
