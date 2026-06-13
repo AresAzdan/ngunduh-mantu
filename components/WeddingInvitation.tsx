@@ -4,7 +4,14 @@ import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'reac
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Calendar, Clock, Heart, ArrowDown, Send, CheckCircle2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { supabase, type RsvpInsert } from '@/lib/supabase';
+import {
+  hasSupabaseAnonKey,
+  hasSupabaseUrl,
+  supabase,
+  type RsvpAttendance,
+  type RsvpInsert,
+  type RsvpRow,
+} from '@/lib/supabase';
 import { useMusic } from './MusicContext';
 
 // === COMPONENTS ===
@@ -37,13 +44,11 @@ const sanitizeGuestName = (value?: string | null, fallback = FALLBACK_GUEST_NAME
   return sanitized || fallback;
 };
 
-const ATTENDANCE_OPTIONS = ["hadir", "tidak_hadir"] as const;
-
-type AttendanceStatus = (typeof ATTENDANCE_OPTIONS)[number];
+const ATTENDANCE_OPTIONS: RsvpAttendance[] = ["hadir", "berhalangan"];
 
 type RsvpFormData = {
   name: string;
-  attendance: AttendanceStatus;
+  attendance: RsvpAttendance;
   guests: string;
   message: string;
 };
@@ -53,8 +58,17 @@ type SubmitStatus = {
   message: string;
 };
 
-const getGuestCount = (attendance: AttendanceStatus, guests: string) => {
-  if (attendance === "tidak_hadir") {
+type GuestbookEntry = {
+  id: string;
+  name: string;
+  attendance: RsvpAttendance;
+  guests: string;
+  message: string;
+  timestamp: string;
+};
+
+const getGuestCount = (attendance: RsvpAttendance, guests: string) => {
+  if (attendance === "berhalangan") {
     return 0;
   }
 
@@ -64,6 +78,35 @@ const getGuestCount = (attendance: AttendanceStatus, guests: string) => {
 
   return Number.parseInt(guests, 10);
 };
+
+const formatGuestCount = (attendance: RsvpAttendance, guestCount: number) => {
+  if (attendance === "berhalangan") {
+    return "0";
+  }
+
+  return guestCount >= 4 ? "4+" : String(guestCount);
+};
+
+const formatTimestamp = (createdAt: string | null) => {
+  if (!createdAt) {
+    return "Baru saja";
+  }
+
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(createdAt));
+};
+
+const mapRsvpRowToGuestbookEntry = (row: RsvpRow, index: number): GuestbookEntry => ({
+  id: `${row.created_at ?? "rsvp"}-${row.guest_name}-${index}`,
+  name: row.guest_name,
+  attendance: row.attendance,
+  guests: formatGuestCount(row.attendance, row.guest_count),
+  message: row.message || "Selamat berbahagia!",
+  timestamp: formatTimestamp(row.created_at),
+});
 
 // 1. Google Fonts Injection & Base Styles
 const FontStyles = () => (
@@ -357,9 +400,9 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
     message: ''
   });
   
-  const [submissions, setSubmissions] = useState([
-    { id: 1, name: 'Bapak & Ibu Anwar', attendance: 'hadir', guests: '2', message: 'Selamat berbahagia Amr dan Ishmah. Semoga menjadi keluarga sakinah mawaddah warahmah.', timestamp: '12 Juni 2026' },
-    { id: 2, name: 'Keluarga Dimas', attendance: 'tidak_hadir', guests: '0', message: 'Mohon maaf kami berhalangan hadir. Semoga acaranya lancar dan sukses selalu ya!', timestamp: '10 Juni 2026' }
+  const [submissions, setSubmissions] = useState<GuestbookEntry[]>([
+    { id: "sample-1", name: 'Bapak & Ibu Anwar', attendance: 'hadir', guests: '2', message: 'Selamat berbahagia Amr dan Ishmah. Semoga menjadi keluarga sakinah mawaddah warahmah.', timestamp: '12 Juni 2026' },
+    { id: "sample-2", name: 'Keluarga Dimas', attendance: 'berhalangan', guests: '0', message: 'Mohon maaf kami berhalangan hadir. Semoga acaranya lancar dan sukses selalu ya!', timestamp: '10 Juni 2026' }
   ]);
 
   const handleInviteeNameChange = useCallback((guestName: string) => {
@@ -378,6 +421,27 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
     setRsvpData((prev) => ({ ...prev, ...updates }));
   };
 
+  const loadRsvps = useCallback(async () => {
+    if (!supabase) {
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("rsvps")
+      .select("invitee_name, guest_name, attendance, guest_count, message, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error("[RSVP] Supabase guestbook reload error", error);
+      return;
+    }
+
+    if (data) {
+      setSubmissions(data.map(mapRsvpRowToGuestbookEntry));
+    }
+  }, []);
+
   const handleRsvpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const guestName = sanitizeGuestName(rsvpData.name, "");
@@ -395,6 +459,8 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
     }
 
     if (!supabase) {
+      console.info("[RSVP] Supabase URL exists", hasSupabaseUrl);
+      console.info("[RSVP] Supabase anon key exists", hasSupabaseAnonKey);
       setSubmitStatus({
         type: "error",
         message: "Konfigurasi RSVP belum tersedia. Silakan coba lagi nanti.",
@@ -411,23 +477,34 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
       attendance: rsvpData.attendance,
       guest_count: guestCount,
       message: message || null,
-      created_at: new Date().toISOString(),
     };
 
-    try {
-      const { error } = await supabase.from("rsvps").insert(rsvpPayload);
+    console.info("[RSVP] Supabase URL exists", hasSupabaseUrl);
+    console.info("[RSVP] Supabase anon key exists", hasSupabaseAnonKey);
+    console.info("[RSVP] Insert payload", rsvpPayload);
 
-      if (error) {
+    try {
+      const insertResponse = await supabase.from("rsvps").insert(rsvpPayload);
+
+      console.info("[RSVP] Supabase insert response", insertResponse);
+      console.info("[RSVP] Supabase insert error", insertResponse.error);
+
+      if (insertResponse.error) {
+        console.error("[RSVP] Supabase insert error", insertResponse.error);
         setSubmitStatus({
           type: "error",
-          message: "Maaf, konfirmasi belum berhasil tersimpan. Silakan coba lagi.",
+          message: `Maaf, konfirmasi belum berhasil tersimpan: ${insertResponse.error.message}`,
         });
         return;
       }
-    } catch {
+
+      await loadRsvps();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Terjadi kesalahan tidak diketahui.";
+      console.error("[RSVP] Supabase insert error", error);
       setSubmitStatus({
         type: "error",
-        message: "Maaf, konfirmasi belum berhasil tersimpan. Silakan coba lagi.",
+        message: `Maaf, konfirmasi belum berhasil tersimpan: ${errorMessage}`,
       });
       return;
     } finally {
@@ -435,7 +512,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
     }
     
     const newSubmission = { 
-      id: Date.now(), 
+      id: `local-${Date.now()}`, 
       name: guestName,
       attendance: rsvpData.attendance,
       guests: rsvpData.attendance === 'hadir' ? rsvpData.guests : '0',
@@ -443,13 +520,21 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
       timestamp: 'Baru saja'
     };
     
-    setSubmissions((prev) => [newSubmission, ...prev]);
+    setSubmissions((prev) => {
+      const alreadyLoaded = prev.some((submission) => submission.id !== newSubmission.id && submission.name === newSubmission.name && submission.message === newSubmission.message);
+
+      return alreadyLoaded ? prev : [newSubmission, ...prev];
+    });
     setRsvpData(prev => ({ ...prev, name: guestName, message: '' })); // Clear message field after submit
     setSubmitStatus({
       type: "success",
       message: "Terima kasih, konfirmasi kehadiran Anda sudah tersimpan.",
     });
   };
+
+  useEffect(() => {
+    void loadRsvps();
+  }, [loadRsvps]);
 
   const totalConfirmedGuests = submissions
     .filter(s => s.attendance === 'hadir')

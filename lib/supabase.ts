@@ -1,19 +1,29 @@
 import { createClient } from "@supabase/supabase-js";
 
+export type RsvpAttendance = "hadir" | "berhalangan";
+
+export type RsvpRow = {
+  invitee_name: string;
+  guest_name: string;
+  attendance: RsvpAttendance;
+  guest_count: number;
+  message: string | null;
+  created_at: string | null;
+};
+
 export type RsvpInsert = {
   invitee_name: string;
   guest_name: string;
-  attendance: string;
+  attendance: RsvpAttendance;
   guest_count: number;
   message: string | null;
-  created_at: string;
 };
 
 type Database = {
   public: {
     Tables: {
       rsvps: {
-        Row: RsvpInsert;
+        Row: RsvpRow;
         Insert: RsvpInsert;
         Update: Partial<RsvpInsert>;
         Relationships: [];
@@ -29,7 +39,9 @@ type Database = {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const hasSupabaseUrl = Boolean(supabaseUrl);
+export const hasSupabaseAnonKey = Boolean(supabaseAnonKey);
+export const isSupabaseConfigured = hasSupabaseUrl && hasSupabaseAnonKey;
 
 export const supabase = isSupabaseConfigured
   ? createClient<Database>(supabaseUrl!, supabaseAnonKey!, {
