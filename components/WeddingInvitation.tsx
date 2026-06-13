@@ -1,9 +1,10 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Calendar, Clock, Heart, ArrowDown, Send, CheckCircle2 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import { supabase, type RsvpInsert } from '@/lib/supabase';
 import { useMusic } from './MusicContext';
 
 // === COMPONENTS ===
@@ -34,6 +35,34 @@ const sanitizeGuestName = (value?: string | null, fallback = FALLBACK_GUEST_NAME
     .slice(0, 80);
 
   return sanitized || fallback;
+};
+
+const ATTENDANCE_OPTIONS = ["hadir", "tidak_hadir"] as const;
+
+type AttendanceStatus = (typeof ATTENDANCE_OPTIONS)[number];
+
+type RsvpFormData = {
+  name: string;
+  attendance: AttendanceStatus;
+  guests: string;
+  message: string;
+};
+
+type SubmitStatus = {
+  type: "success" | "error";
+  message: string;
+};
+
+const getGuestCount = (attendance: AttendanceStatus, guests: string) => {
+  if (attendance === "tidak_hadir") {
+    return 0;
+  }
+
+  if (guests === "4+") {
+    return 4;
+  }
+
+  return Number.parseInt(guests, 10);
 };
 
 // 1. Google Fonts Injection & Base Styles
@@ -233,7 +262,13 @@ const GuestNameDisplay = ({ guestName }: { guestName: string }) => (
   </motion.div>
 );
 
-const GuestNameFromSearchParams = ({ initialGuestName }: { initialGuestName: string }) => {
+const GuestNameFromSearchParams = ({
+  initialGuestName,
+  onGuestNameChange,
+}: {
+  initialGuestName: string;
+  onGuestNameChange: (guestName: string) => void;
+}) => {
   const searchParams = useSearchParams();
   const queryGuestName = searchParams.get("to");
   const guestName = useMemo(
@@ -241,12 +276,61 @@ const GuestNameFromSearchParams = ({ initialGuestName }: { initialGuestName: str
     [initialGuestName, queryGuestName],
   );
 
+  useEffect(() => {
+    onGuestNameChange(guestName);
+  }, [guestName, onGuestNameChange]);
+
   return <GuestNameDisplay guestName={guestName} />;
 };
 
-const GuestNameSection = ({ initialGuestName }: { initialGuestName: string }) => (
+const GuestNameSection = ({
+  initialGuestName,
+  onGuestNameChange,
+}: {
+  initialGuestName: string;
+  onGuestNameChange: (guestName: string) => void;
+}) => (
   <Suspense fallback={<GuestNameDisplay guestName={sanitizeGuestName(initialGuestName)} />}>
-    <GuestNameFromSearchParams initialGuestName={initialGuestName} />
+    <GuestNameFromSearchParams
+      initialGuestName={initialGuestName}
+      onGuestNameChange={onGuestNameChange}
+    />
+  </Suspense>
+);
+
+const GuestNameSyncFromSearchParams = ({
+  initialGuestName,
+  onGuestNameChange,
+}: {
+  initialGuestName: string;
+  onGuestNameChange: (guestName: string) => void;
+}) => {
+  const searchParams = useSearchParams();
+  const queryGuestName = searchParams.get("to");
+  const guestName = useMemo(
+    () => sanitizeGuestName(queryGuestName ?? initialGuestName),
+    [initialGuestName, queryGuestName],
+  );
+
+  useEffect(() => {
+    onGuestNameChange(guestName);
+  }, [guestName, onGuestNameChange]);
+
+  return null;
+};
+
+const GuestNameSync = ({
+  initialGuestName,
+  onGuestNameChange,
+}: {
+  initialGuestName: string;
+  onGuestNameChange: (guestName: string) => void;
+}) => (
+  <Suspense fallback={null}>
+    <GuestNameSyncFromSearchParams
+      initialGuestName={initialGuestName}
+      onGuestNameChange={onGuestNameChange}
+    />
   </Suspense>
 );
 
@@ -259,10 +343,14 @@ type WeddingInvitationProps = {
 
 export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const initialInviteeName = useMemo(() => sanitizeGuestName(initialGuestName), [initialGuestName]);
+  const [inviteeName, setInviteeName] = useState(initialInviteeName);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus | null>(null);
   const { play } = useMusic();
 
   // --- RSVP & GUESTBOOK STATE ---
-  const [rsvpData, setRsvpData] = useState({
+  const [rsvpData, setRsvpData] = useState<RsvpFormData>({
     name: sanitizeGuestName(initialGuestName, ""),
     attendance: 'hadir',
     guests: '1',
@@ -274,21 +362,93 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
     { id: 2, name: 'Keluarga Dimas', attendance: 'tidak_hadir', guests: '0', message: 'Mohon maaf kami berhalangan hadir. Semoga acaranya lancar dan sukses selalu ya!', timestamp: '10 Juni 2026' }
   ]);
 
-  const handleRsvpSubmit = (e: React.FormEvent) => {
+  const handleInviteeNameChange = useCallback((guestName: string) => {
+    setInviteeName(guestName);
+    setRsvpData((prev) => {
+      if (prev.name || guestName === FALLBACK_GUEST_NAME) {
+        return prev;
+      }
+
+      return { ...prev, name: guestName };
+    });
+  }, []);
+
+  const updateRsvpData = (updates: Partial<RsvpFormData>) => {
+    setSubmitStatus(null);
+    setRsvpData((prev) => ({ ...prev, ...updates }));
+  };
+
+  const handleRsvpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rsvpData.name) return;
+    const guestName = sanitizeGuestName(rsvpData.name, "");
+    const guestCount = getGuestCount(rsvpData.attendance, rsvpData.guests);
+    const message = rsvpData.message.trim();
+
+    if (!guestName) {
+      setSubmitStatus({ type: "error", message: "Mohon isi nama tamu terlebih dahulu." });
+      return;
+    }
+
+    if (rsvpData.attendance === "hadir" && (!Number.isFinite(guestCount) || guestCount < 1)) {
+      setSubmitStatus({ type: "error", message: "Mohon pilih jumlah tamu yang valid." });
+      return;
+    }
+
+    if (!supabase) {
+      setSubmitStatus({
+        type: "error",
+        message: "Konfigurasi RSVP belum tersedia. Silakan coba lagi nanti.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitStatus(null);
+
+    const rsvpPayload: RsvpInsert = {
+      invitee_name: inviteeName,
+      guest_name: guestName,
+      attendance: rsvpData.attendance,
+      guest_count: guestCount,
+      message: message || null,
+      created_at: new Date().toISOString(),
+    };
+
+    try {
+      const { error } = await supabase.from("rsvps").insert(rsvpPayload);
+
+      if (error) {
+        setSubmitStatus({
+          type: "error",
+          message: "Maaf, konfirmasi belum berhasil tersimpan. Silakan coba lagi.",
+        });
+        return;
+      }
+    } catch {
+      setSubmitStatus({
+        type: "error",
+        message: "Maaf, konfirmasi belum berhasil tersimpan. Silakan coba lagi.",
+      });
+      return;
+    } finally {
+      setIsSubmitting(false);
+    }
     
     const newSubmission = { 
       id: Date.now(), 
-      name: rsvpData.name,
+      name: guestName,
       attendance: rsvpData.attendance,
       guests: rsvpData.attendance === 'hadir' ? rsvpData.guests : '0',
-      message: rsvpData.message || 'Selamat berbahagia!',
+      message: message || 'Selamat berbahagia!',
       timestamp: 'Baru saja'
     };
     
-    setSubmissions([newSubmission, ...submissions]);
-    setRsvpData(prev => ({ ...prev, message: '' })); // Clear message field after submit
+    setSubmissions((prev) => [newSubmission, ...prev]);
+    setRsvpData(prev => ({ ...prev, name: guestName, message: '' })); // Clear message field after submit
+    setSubmitStatus({
+      type: "success",
+      message: "Terima kasih, konfirmasi kehadiran Anda sudah tersimpan.",
+    });
   };
 
   const totalConfirmedGuests = submissions
@@ -314,6 +474,10 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
   return (
     <div className="font-sans text-[#1A3317] bg-[#F6F8F6] min-h-screen relative overflow-hidden antialiased">
       <FontStyles />
+      <GuestNameSync
+        initialGuestName={initialGuestName}
+        onGuestNameChange={handleInviteeNameChange}
+      />
 
       {/* --- HERO COVER (SECTION 1) --- */}
       <AnimatePresence>
@@ -367,7 +531,10 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                   24 Juni 2026
                 </motion.p>
 
-                <GuestNameSection initialGuestName={initialGuestName} />
+                <GuestNameSection
+                  initialGuestName={initialGuestName}
+                  onGuestNameChange={handleInviteeNameChange}
+                />
 
                 <motion.button
                   onClick={handleOpenInvitation}
@@ -584,7 +751,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                       required 
                       type="text" 
                       value={rsvpData.name}
-                      onChange={(e) => setRsvpData({...rsvpData, name: e.target.value})}
+                      onChange={(e) => updateRsvpData({ name: e.target.value })}
                       className="w-full bg-transparent border-b border-[#A6842E]/40 px-4 py-3 text-[#1A3317] focus:outline-none focus:border-[#A6842E] font-sans transition-colors placeholder-[#1A3317]/30" 
                       placeholder="Masukkan nama lengkap Anda" 
                     />
@@ -594,11 +761,11 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                   <div>
                     <label className="block font-serif text-xl text-[#10260D] mb-3">Kehadiran</label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {['hadir', 'tidak_hadir'].map((status) => (
+                      {ATTENDANCE_OPTIONS.map((status) => (
                         <button
                           key={status}
                           type="button"
-                          onClick={() => setRsvpData({...rsvpData, attendance: status})}
+                          onClick={() => updateRsvpData({ attendance: status })}
                           className={`py-3 px-4 rounded-xl border transition-all duration-300 flex items-center justify-center gap-2 ${
                             rsvpData.attendance === status 
                               ? 'bg-[#10260D] text-[#A6842E] border-[#10260D] shadow-md' 
@@ -627,7 +794,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                             <button
                               key={num}
                               type="button"
-                              onClick={() => setRsvpData({...rsvpData, guests: num})}
+                              onClick={() => updateRsvpData({ guests: num })}
                               className={`py-3 rounded-xl border transition-all duration-300 font-medium ${
                                 rsvpData.guests === num 
                                   ? 'bg-[#A6842E] text-[#10260D] border-[#A6842E] shadow-md' 
@@ -648,7 +815,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                     <textarea 
                       rows={4}
                       value={rsvpData.message}
-                      onChange={(e) => setRsvpData({...rsvpData, message: e.target.value})}
+                      onChange={(e) => updateRsvpData({ message: e.target.value })}
                       className="w-full bg-white/50 border border-[#A6842E]/40 rounded-xl px-4 py-3 text-[#1A3317] focus:outline-none focus:border-[#A6842E] font-sans transition-colors resize-none placeholder-[#1A3317]/30" 
                       placeholder="Tuliskan doa dan harapan untuk kedua mempelai..." 
                     />
@@ -657,11 +824,25 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                   {/* Submit Button */}
                   <button
                     type="submit"
-                    className="w-full py-4 bg-[#10260D] text-[#A6842E] rounded-xl font-medium tracking-wide hover:bg-[#1A3317] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#10260D]/20 group"
+                    disabled={isSubmitting}
+                    className={`w-full py-4 bg-[#10260D] text-[#A6842E] rounded-xl font-medium tracking-wide hover:bg-[#1A3317] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#10260D]/20 group ${
+                      isSubmitting ? "cursor-not-allowed opacity-70" : ""
+                    }`}
                   >
-                    Kirim Konfirmasi
+                    {isSubmitting ? "Mengirim..." : "Kirim Konfirmasi"}
                     <Send size={18} className="group-hover:translate-x-1 transition-transform" />
                   </button>
+
+                  {submitStatus && (
+                    <p
+                      role="status"
+                      className={`text-center font-sans text-sm leading-relaxed ${
+                        submitStatus.type === "success" ? "text-[#10260D]" : "text-red-700"
+                      }`}
+                    >
+                      {submitStatus.message}
+                    </p>
+                  )}
                 </form>
               </SectionFrame>
 
