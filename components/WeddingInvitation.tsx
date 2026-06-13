@@ -422,7 +422,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                         </div>
                       </div>
                       <div className="flex min-h-12 items-center">
-                        <p className="font-serif tracking-widest text-lg text-[#A6842E]/90">24 Juni 2026</p>
+                        <p className="font-serif tracking-widest text-xl text-[#A6842E]/90">24 Juni 2026</p>
                       </div>
                     </div>
 
@@ -433,7 +433,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                         </div>
                       </div>
                       <div className="flex min-h-12 items-center">
-                        <p className="font-serif tracking-widest text-lg text-[#A6842E]/90">10:00 - 14:00 WIB</p>
+                        <p className="font-serif tracking-widest text-xl text-[#A6842E]/90">10:00 - 14:00 WIB</p>
                       </div>
                     </div>
 
