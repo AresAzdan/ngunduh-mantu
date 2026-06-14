@@ -46,11 +46,14 @@ const sanitizeGuestName = (value?: string | null, fallback = FALLBACK_GUEST_NAME
 };
 
 const ATTENDANCE_OPTIONS: RsvpAttendance[] = ["hadir", "berhalangan"];
+const GUEST_COUNT_OPTIONS = ["1", "2"] as const;
+
+type RsvpGuestCount = (typeof GUEST_COUNT_OPTIONS)[number];
 
 type RsvpFormData = {
   name: string;
   attendance: RsvpAttendance;
-  guests: string;
+  guests: RsvpGuestCount;
   message: string;
 };
 
@@ -68,13 +71,16 @@ type GuestbookEntry = {
   timestamp: string;
 };
 
+const isRsvpGuestCount = (guests: string): guests is RsvpGuestCount =>
+  GUEST_COUNT_OPTIONS.includes(guests as RsvpGuestCount);
+
 const getGuestCount = (attendance: RsvpAttendance, guests: string) => {
   if (attendance === "berhalangan") {
     return 0;
   }
 
-  if (guests === "4+") {
-    return 4;
+  if (!isRsvpGuestCount(guests)) {
+    return null;
   }
 
   return Number.parseInt(guests, 10);
@@ -85,7 +91,17 @@ const formatGuestCount = (attendance: RsvpAttendance, guestCount: number) => {
     return "0";
   }
 
-  return guestCount >= 4 ? "4+" : String(guestCount);
+  return String(guestCount);
+};
+
+const parseGuestbookGuestCount = (guests: string) => {
+  if (guests === "4+") {
+    return 4;
+  }
+
+  const parsedGuests = Number.parseInt(guests, 10);
+
+  return Number.isFinite(parsedGuests) ? parsedGuests : 0;
 };
 
 const formatTimestamp = (createdAt: string | null) => {
@@ -468,7 +484,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
       return;
     }
 
-    if (rsvpData.attendance === "hadir" && (!Number.isFinite(guestCount) || guestCount < 1)) {
+    if (guestCount === null) {
       setSubmitStatus({ type: "error", message: "Mohon pilih jumlah tamu yang valid." });
       return;
     }
@@ -563,7 +579,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
 
   const totalConfirmedGuests = submissions
     .filter(s => s.attendance === 'hadir')
-    .reduce((acc, curr) => acc + (curr.guests === '4+' ? 4 : parseInt(curr.guests || '0')), 0);
+    .reduce((acc, curr) => acc + parseGuestbookGuestCount(curr.guests), 0);
 
   const handleOpenInvitation = () => {
     setIsOpen(true);
@@ -900,8 +916,8 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                         className="overflow-hidden"
                       >
                         <label className="block font-serif text-xl text-[#10260D] mb-3">Jumlah Tamu</label>
-                        <div className="grid grid-cols-4 gap-3">
-                          {['1', '2', '3', '4+'].map((num) => (
+                        <div className="grid grid-cols-2 gap-3">
+                          {GUEST_COUNT_OPTIONS.map((num) => (
                             <button
                               key={num}
                               type="button"
