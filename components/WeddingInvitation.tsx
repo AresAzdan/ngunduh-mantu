@@ -770,7 +770,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                         </div>
                       </div>
                       <div className="flex min-h-12 items-center">
-                        <p className="font-serif tracking-wide text-xl text-[#A6842E] mb-0">10:00 - 14:00 WIB</p>
+                        <p className="font-serif tracking-wide text-xl text-[#A6842E] mb-0">12:00 - 16:00 WIB</p>
                       </div>
                     </div>
 
