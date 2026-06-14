@@ -421,9 +421,9 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
     setRsvpData((prev) => ({ ...prev, ...updates }));
   };
 
-  const loadRsvps = useCallback(async () => {
+  const fetchRsvps = useCallback(async (): Promise<GuestbookEntry[] | null> => {
     if (!supabase) {
-      return;
+      return null;
     }
 
     const { data, error } = await supabase
@@ -434,13 +434,19 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
 
     if (error) {
       console.error("[RSVP] Supabase guestbook reload error", error);
-      return;
+      return null;
     }
 
-    if (data) {
-      setSubmissions(data.map(mapRsvpRowToGuestbookEntry));
-    }
+    return data ? data.map(mapRsvpRowToGuestbookEntry) : null;
   }, []);
+
+  const reloadRsvps = useCallback(async () => {
+    const loadedSubmissions = await fetchRsvps();
+
+    if (loadedSubmissions) {
+      setSubmissions(loadedSubmissions);
+    }
+  }, [fetchRsvps]);
 
   const handleRsvpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -498,7 +504,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
         return;
       }
 
-      await loadRsvps();
+      await reloadRsvps();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Terjadi kesalahan tidak diketahui.";
       console.error("[RSVP] Supabase insert error", error);
@@ -533,8 +539,18 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
   };
 
   useEffect(() => {
-    void loadRsvps();
-  }, [loadRsvps]);
+    let isMounted = true;
+
+    void fetchRsvps().then((loadedSubmissions) => {
+      if (isMounted && loadedSubmissions) {
+        setSubmissions(loadedSubmissions);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchRsvps]);
 
   const totalConfirmedGuests = submissions
     .filter(s => s.attendance === 'hadir')
@@ -999,7 +1015,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
 
 
         {/* SECTION 7 — FOOTER */}
-        <footer className="relative z-10 bg-[#10260D] text-[#A6842E] py-12 border-t border-[#A6842E]/30 text-center overflow-hidden">
+        <footer className="relative z-10 bg-[#10260D] text-[#A6842E] pt-12 pb-28 md:pb-24 border-t border-[#A6842E]/30 text-center overflow-hidden">
           <EgyptianPattern variant="light" />
           <div className="max-w-4xl mx-auto px-6 relative z-10">
             <h4 className="font-serif text-2xl mb-2">Amr & Ishmah</h4>
