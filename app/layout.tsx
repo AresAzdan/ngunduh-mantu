@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import AttributionWatermark from "@/components/AttributionWatermark";
 import BackgroundMusic from "@/components/BackgroundMusic";
 import "./globals.css";
 
@@ -22,7 +21,6 @@ export default function RootLayout({
     <html lang="id">
       <body>
         <BackgroundMusic>{children}</BackgroundMusic>
-        <AttributionWatermark />
       </body>
     </html>
   );

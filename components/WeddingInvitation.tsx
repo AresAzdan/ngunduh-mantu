@@ -12,6 +12,7 @@ import {
   type RsvpInsert,
   type RsvpRow,
 } from '@/lib/supabase';
+import AttributionWatermark from './AttributionWatermark';
 import { useMusic } from './MusicContext';
 
 // === COMPONENTS ===
@@ -579,6 +580,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
         initialGuestName={initialGuestName}
         onGuestNameChange={handleInviteeNameChange}
       />
+      {isOpen && <AttributionWatermark />}
 
       {/* --- HERO COVER (SECTION 1) --- */}
       <AnimatePresence>
