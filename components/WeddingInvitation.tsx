@@ -293,7 +293,7 @@ const GuestNameDisplay = ({ guestName }: { guestName: string }) => (
     initial={{ opacity: 0, y: 14 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.8, delay: 1.35, ease: "easeOut" }}
-    className="mb-10 w-full max-w-xl text-center text-[#A6842E] md:mb-12"
+    className="mb-6 w-full max-w-xl text-center text-[#A6842E] md:mb-12"
   >
     <p className="font-sans text-xs uppercase tracking-[0.35em] opacity-80 md:text-sm">
       Kepada Yth.
@@ -595,12 +595,12 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
             <SectionFrame className="w-full h-full border-[#A6842E]/50 z-10">
               <Particles />
               
-              <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 max-w-2xl mx-auto">
+              <div className="relative z-10 flex h-full min-h-0 flex-col items-center justify-center px-5 pt-[calc(env(safe-area-inset-top)+2rem)] pb-[calc(env(safe-area-inset-bottom)+5rem)] text-center md:px-6 md:py-0 max-w-2xl mx-auto">
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.9 }} 
                   animate={{ opacity: 1, scale: 1 }} 
                   transition={{ duration: 1, delay: 0.2 }}
-                  className="text-[#A6842E] tracking-widest text-sm md:text-base uppercase mb-8 font-medium"
+                  className="text-[#A6842E] tracking-widest text-sm md:text-base uppercase mb-5 md:mb-8 font-medium"
                 >
                   Ngunduh Mantu
                 </motion.div>
@@ -609,11 +609,11 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                   initial={{ opacity: 0, y: 20 }} 
                   animate={{ opacity: 1, y: 0 }} 
                   transition={{ duration: 1, delay: 0.6 }}
-                  className="font-serif text-[#A6842E] text-4xl md:text-6xl lg:text-7xl leading-tight mb-6"
+                  className="font-serif text-[#A6842E] text-4xl md:text-6xl lg:text-7xl leading-tight mb-4 md:mb-6"
                 >
                   Amr Yamani Zayd Makarim
                   <br />
-                  <span className="text-3xl md:text-5xl my-4 block font-light italic">&amp;</span>
+                  <span className="text-3xl md:text-5xl my-3 md:my-4 block font-light italic">&amp;</span>
                   Ishmah Maemunah Ibrahim Sungkar
                 </motion.h1>
 
@@ -622,14 +622,14 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
                   animate={{ opacity: 1 }}
                   transition={{ duration: 1, delay: 1 }}
                 >
-                  <DividerOrnament className="text-[#A6842E] my-6 opacity-80" />
+                  <DividerOrnament className="text-[#A6842E] my-4 md:my-6 opacity-80" />
                 </motion.div>
 
                 <motion.p 
                   initial={{ opacity: 0 }} 
                   animate={{ opacity: 1 }} 
                   transition={{ duration: 1, delay: 1.2 }}
-                  className="mb-8 font-serif text-xl tracking-wide text-[#A6842E] md:text-2xl"
+                  className="mb-5 font-serif text-xl tracking-wide text-[#A6842E] md:mb-8 md:text-2xl"
                 >
                   24 Juni 2026
                 </motion.p>
