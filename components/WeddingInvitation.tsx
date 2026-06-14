@@ -819,7 +819,7 @@ export default function App({ initialGuestName = "" }: WeddingInvitationProps) {
             </SectionFrame>
 
             <a 
-              href="https://goo.gl/maps/placeholder" // Intentionally generic link fallback if they click the button instead of iframe
+              href="https://www.google.com/maps/search/?api=1&query=-6.6230849,106.7754080"
               target="_blank" 
               rel="noopener noreferrer"
               className="inline-flex items-center gap-3 px-8 py-4 bg-[#10260D] text-[#A6842E] rounded-full font-medium tracking-wide hover:bg-[#1A3317] hover:shadow-lg transition-all"
